@@ -1,0 +1,24 @@
+/public/home/wangyuanhao/miniconda3/envs/frcnn/bin/python
+Namespace(batch_size=1, conf_thres=0.03, config_file='', data='./data/dataset.yaml', device='0', do_coco_metric=False, do_pr_metric=True, eval_config_file='./configs/experiment/eval_640_repro.py', half=False, height=None, img_size=640, infer_on_rect=True, iou_thres=0.65, name='exp', plot_confusion_matrix=False, plot_curve=True, reproduce_640_eval=False, save_dir='runs/val/', shrink_size=0, specific_shape=False, task='test', verbose=True, weights='./weights/best_ckpt.pt', width=None)
+Loading checkpoint from ./weights/best_ckpt.pt
+
+Fusing model...
+Switch model to deploy modality.
+Model Summary: Params: 4.63M, Gflops: 11.34
+img record infomation path is:./VOC/images/.test_cache.json
+Test: Checking formats of labels with 8 process(es): 
+  0%|          | 0/70 [00:00<?, ?it/s]70 label(s) found, 0 label(s) missing, 0 label(s) empty, 0 invalid label files: 100%|██████████| 70/70 [00:00<00:00, 4427.71it/s]
+Test: Final numbers of valid images: 70/ labels: 70. 
+0.4s for dataset initialization.
+Inferencing model in test datasets.:   0%|               | 0/70 [00:00<?, ?it/s]Inferencing model in test datasets.:   3%|▏      | 2/70 [00:00<00:04, 13.80it/s]Inferencing model in test datasets.:   6%|▍      | 4/70 [00:00<00:04, 15.51it/s]Inferencing model in test datasets.:   9%|▌      | 6/70 [00:00<00:03, 16.13it/s]Inferencing model in test datasets.:  11%|▊      | 8/70 [00:00<00:03, 16.42it/s]Inferencing model in test datasets.:  14%|▊     | 10/70 [00:00<00:03, 16.46it/s]Inferencing model in test datasets.:  17%|█     | 12/70 [00:00<00:03, 15.25it/s]Inferencing model in test datasets.:  20%|█▏    | 14/70 [00:00<00:03, 14.98it/s]Inferencing model in test datasets.:  23%|█▎    | 16/70 [00:01<00:03, 14.69it/s]Inferencing model in test datasets.:  26%|█▌    | 18/70 [00:01<00:03, 15.24it/s]Inferencing model in test datasets.:  29%|█▋    | 20/70 [00:01<00:03, 15.60it/s]Inferencing model in test datasets.:  31%|█▉    | 22/70 [00:01<00:03, 15.88it/s]Inferencing model in test datasets.:  34%|██    | 24/70 [00:01<00:02, 16.16it/s]Inferencing model in test datasets.:  37%|██▏   | 26/70 [00:01<00:02, 16.35it/s]Inferencing model in test datasets.:  40%|██▍   | 28/70 [00:01<00:02, 16.50it/s]Inferencing model in test datasets.:  43%|██▌   | 30/70 [00:01<00:02, 16.27it/s]Inferencing model in test datasets.:  46%|██▋   | 32/70 [00:02<00:02, 16.40it/s]Inferencing model in test datasets.:  49%|██▉   | 34/70 [00:02<00:02, 16.55it/s]Inferencing model in test datasets.:  51%|███   | 36/70 [00:02<00:02, 16.68it/s]Inferencing model in test datasets.:  54%|███▎  | 38/70 [00:02<00:01, 16.71it/s]Inferencing model in test datasets.:  57%|███▍  | 40/70 [00:02<00:01, 16.82it/s]Inferencing model in test datasets.:  60%|███▌  | 42/70 [00:02<00:01, 16.93it/s]Inferencing model in test datasets.:  63%|███▊  | 44/70 [00:02<00:01, 16.91it/s]Inferencing model in test datasets.:  66%|███▉  | 46/70 [00:02<00:01, 16.96it/s]Inferencing model in test datasets.:  69%|████  | 48/70 [00:02<00:01, 16.99it/s]Inferencing model in test datasets.:  71%|████▎ | 50/70 [00:03<00:01, 16.96it/s]Inferencing model in test datasets.:  74%|████▍ | 52/70 [00:03<00:01, 16.98it/s]Inferencing model in test datasets.:  77%|████▋ | 54/70 [00:03<00:00, 17.01it/s]Inferencing model in test datasets.:  80%|████▊ | 56/70 [00:03<00:00, 16.97it/s]Inferencing model in test datasets.:  83%|████▉ | 58/70 [00:03<00:00, 16.89it/s]Inferencing model in test datasets.:  86%|█████▏| 60/70 [00:03<00:00, 16.90it/s]Inferencing model in test datasets.:  89%|█████▎| 62/70 [00:03<00:00, 16.92it/s]Inferencing model in test datasets.:  91%|█████▍| 64/70 [00:03<00:00, 16.93it/s]Inferencing model in test datasets.:  94%|█████▋| 66/70 [00:04<00:00, 16.94it/s]Inferencing model in test datasets.:  97%|█████▊| 68/70 [00:04<00:00, 16.92it/s]Inferencing model in test datasets.: 100%|██████| 70/70 [00:04<00:00, 16.95it/s]Inferencing model in test datasets.: 100%|██████| 70/70 [00:04<00:00, 16.44it/s]
+IOU 50 best mF1 thershold near 0.361.
+Class                 Images      Labels     P@.5iou     R@.5iou    F1@.5iou      mAP@.5  mAP@.5:.95
+all                       70         626       0.636       0.705       0.669       0.711       0.381
+leaf                      70         170       0.598       0.659       0.627       0.645       0.332
+rolled                    70         456       0.675       0.751       0.711       0.778        0.43
+
+Evaluating speed.
+Average pre-process time: 0.26 ms
+Average inference time: 10.73 ms
+Average NMS time: 2.30 ms
+FPS: 75.245
