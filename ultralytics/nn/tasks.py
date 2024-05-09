@@ -12,7 +12,8 @@ import torch.nn as nn
 from ultralytics.nn.modules import (AIFI, C1, C2, C3, C3TR, SPP, SPPF, Bottleneck, BottleneckCSP, C2f, C3Ghost, C3x,
                                     Classify, Concat, Conv, Conv2, ConvTranspose, Detect, DWConv, DWConvTranspose2d,
                                     Focus, GhostBottleneck, GhostConv, HGBlock, HGStem, Pose, RepC3, RepConv,
-                                    RTDETRDecoder, Segment, CBAM, EVCBlock, C2f_DCN,VoVGSCSP,VoVGSCSPC,GSConv, space_to_depth,C2f_dysnakeconv)
+                                    RTDETRDecoder, Segment, CBAM, EVCBlock, C2f_DCN,VoVGSCSP,VoVGSCSPC,GSConv, 
+                                    space_to_depth,C2f_dysnakeconv,ODConv2d_yolo,vanillanetBlock,C2fattention1,C2fattention2)
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
 from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8PoseLoss, v8SegmentationLoss
@@ -20,12 +21,14 @@ from ultralytics.utils.plotting import feature_visualization
 from ultralytics.utils.torch_utils import (fuse_conv_and_bn, fuse_deconv_and_bn, initialize_weights, intersect_dicts,
                                            make_divisible, model_info, scale_img, time_sync)
 #from ultralytics.nn.SlimNeck import VoVGSCSP, VoVGSCSPC, GSConv
-
 from ultralytics.nn.EMA import EMA
-from ultralytics.nn.mobilenet import conv_bn_hswish, MobileNetV3_InvertedResidual
 from ultralytics.nn.attention.attention import *
-#from .modules.EfficientV2 import efficientvit_backbone_b0,efficientvit_backbone_b1,efficientvit_backbone_b2,efficientvit_backbone_b3
-from .modules.CARAFE import *
+#from ultralytics.nn.modules.efficientVit import *
+from ultralytics.nn.modules.CARAFE import *
+from ultralytics.nn.modules.Dilation import MultiDilatelocalAttention 
+from ultralytics.nn.backbone.MobileNetV3 import *
+from ultralytics.nn.qihnet import ShuffleNetV2,Conv_maxpool
+
 try:
     import thop
 except ImportError:
@@ -87,22 +90,23 @@ class BaseModel(nn.Module):
                 self._profile_one_layer(m, x, dt)
             if hasattr(m, 'backbone'):
                 x = m(x)
-                if len(x) != 5: # 0 - 5
+                for _ in range(5 - len(x)):
                     x.insert(0, None)
-                for index, i in enumerate(x):
-                    if index in self.save:
+                for i_idx, i in enumerate(x):
+                    if i_idx in self.save:
                         y.append(i)
                     else:
                         y.append(None)
-                x = x[-1] # 最后一个输出传给下一层
+                # for i in x:
+                #     if i is not None:
+                #         print(i.size())
+                x = x[-1]
             else:
                 x = m(x)  # run
                 y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
         return x
-
-
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference."""
@@ -158,6 +162,8 @@ class BaseModel(nn.Module):
                 if isinstance(m, RepConv):
                     m.fuse_convs()
                     m.forward = m.forward_fuse  # update forward
+                if hasattr(m, 'switch_to_deploy'):
+                    m.switch_to_deploy()
             self.info(verbose=verbose)
 
         return self
@@ -655,9 +661,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         LOGGER.info(f"\n{'':>3}{'from':>20}{'n':>3}{'params':>10}  {'module':<45}{'arguments':<30}")
     ch = [ch]
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
-    backbone = False
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):  # from, number, module, args
-        t = m        
         m = getattr(torch.nn, m[3:]) if 'nn.' in m else globals()[m]  # get module
         for j, a in enumerate(args):
             if isinstance(a, str):
@@ -669,7 +673,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
         if m in (Classify, Conv, ConvTranspose, GhostConv, Bottleneck, GhostBottleneck, SPP, SPPF, DWConv, Focus,
                  BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, nn.ConvTranspose2d, DWConvTranspose2d, C3x, RepC3,
                  EVCBlock, C2f_DCN, VoVGSCSP, VoVGSCSPC, GSConv, CoordAtt, GAM_Attention, SEAttention, ShuffleAttention, 
-                 NAMAttention, BoT3, C2f_dysnakeconv):
+                 NAMAttention, BoT3, C2f_dysnakeconv,ODConv2d_yolo,NAMAttention,GCTattention,vanillanetBlock,C2fattention1,C2fattention2):
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
@@ -678,11 +682,6 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if m in (BottleneckCSP, C1, C2, C2f, C3, C3TR, C3Ghost, C3x, RepC3, C2f_DCN):
                 args.insert(2, n)  # number of repeats
                 n = 1
-        #elif m in {efficientvit_backbone_b0, efficientvit_backbone_b1, efficientvit_backbone_b2, efficientvit_backbone_b3}:
-            #m = m()
-            #c2 = m.width_list  # 返回通道列表
-            #backbone = True
-
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in (HGStem, HGBlock):
@@ -692,16 +691,39 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 args.insert(4, n)  # number of repeats
                 n = 1
 
+        elif m in [ShuffleNetV2, Conv_maxpool]:
+            c1, c2 = ch[f], args[0]
+            if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
+                c2 = make_divisible(c2 * width, 8)
+            args = [c1, c2, *args[1:]]
+
+
+
+
         elif m in [conv_bn_hswish, MobileNetV3_InvertedResidual]:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
             args = [c1, c2, *args[1:]]
 
+        elif m in {conv_bn_hswish, MobileNetV3_InvertedResidual}:
+            c1, c2 = ch[f], args[0]
+            if c2 != nc:  # if not output
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, c2, *args[1:]]
+
+        elif m in (MHSA,CoTAttention):
+            c1, c2 = ch[f], args[0]
+            if c2 != nc:
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, *args[1:]]
+ 
+        #####attention  ####
+
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
 
-        elif m in {EMA}:
+        elif m in {EMA, MultiDilatelocalAttention}:
             args = [ch[f],*args]
 
         elif m is Concat:
@@ -740,37 +762,25 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
 
         elif m is RTDETRDecoder:  # special case, channels arg must be passed in index 1
             args.insert(1, [ch[x] for x in f])
-        
-        
 
-        
+        elif m is CARAFE:
+            args = [ch[f], *args]
+
         else:
             c2 = ch[f]
-        if isinstance(c2, list):
-            m_ = m
-            m_.backbone = True
-        else:
-            m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
-            t = str(m)[8:-2].replace('__main__.', '')  # module type
- 
- 
+
+        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
+        t = str(m)[8:-2].replace('__main__.', '')  # module type
         m.np = sum(x.numel() for x in m_.parameters())  # number params
-        m_.i, m_.f, m_.type = i + 4 if backbone else i, f, t  # attach index, 'from' index, type
+        m_.i, m_.f, m_.type = i, f, t  # attach index, 'from' index, type
         if verbose:
             LOGGER.info(f'{i:>3}{str(f):>20}{n_:>3}{m.np:10.0f}  {t:<45}{str(args):<30}')  # print
-        # save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
-        save.extend(x % (i + 4 if backbone else i) for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
+        save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
         if i == 0:
             ch = []
-        if isinstance(c2, list):
-            ch.extend(c2)
-            if len(c2) != 5:
-                ch.insert(0, 0)
-        else:
-            ch.append(c2)
+        ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
-  
 
 
 def yaml_model_load(path):

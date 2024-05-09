@@ -1,8 +1,0 @@
-#Replace the path with your own and note the space between the colon and the path
-train: I:/desk/rolled/code/dataset/images/train 
-val: I:/desk/rolled/code/dataset/images/val
-test: I:/desk/rolled/code/dataset/images/test
-# number of classes
-nc: 2
-# class names
-names: ['leaf','rolled']

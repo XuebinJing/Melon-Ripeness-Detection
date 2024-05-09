@@ -7,4 +7,4 @@ model = YOLO("ultralytics/cfg/models/v8/yolov8.yaml")
 
 # Use the model
 
-results = model.train(data="dataset/leaf.yaml", epochs=100, batch=16)  # 训练模型
+results = model.train(data="dataset/melon.yaml", epochs=100, batch=16)  # 训练模型

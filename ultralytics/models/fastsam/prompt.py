@@ -87,7 +87,7 @@ class FastSAMPrompt:
         pbar = TQDM(annotations, total=len(annotations))
         for ann in pbar:
             result_name = os.path.basename(ann.path)
-            image = ann.orig_img[..., ::-1]  # BGR to RGB
+            image = ann.orig_img
             original_h, original_w = ann.orig_shape
             # for macOS only
             # plt.switch_backend('TkAgg')
@@ -108,15 +108,17 @@ class FastSAMPrompt:
                         mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
                         masks[i] = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, np.ones((8, 8), np.uint8))
 
-                self.fast_show_mask(masks,
-                                    plt.gca(),
-                                    random_color=mask_random_color,
-                                    bbox=bbox,
-                                    points=points,
-                                    pointlabel=point_label,
-                                    retinamask=retina,
-                                    target_height=original_h,
-                                    target_width=original_w)
+                self.fast_show_mask(
+                    masks,
+                    plt.gca(),
+                    random_color=mask_random_color,
+                    bbox=bbox,
+                    points=points,
+                    pointlabel=point_label,
+                    retinamask=retina,
+                    target_height=original_h,
+                    target_width=original_w,
+                )
 
                 if with_contours:
                     contour_all = []
@@ -132,11 +134,17 @@ class FastSAMPrompt:
                     contour_mask = temp / 255 * color.reshape(1, 1, -1)
                     plt.imshow(contour_mask)
 
-            # Save the figure
+            plt.axis('off')
+            fig = plt.gcf()
+
+            # Check if the canvas has been drawn
+            if fig.canvas.get_renderer() is None:  # macOS requires this or tests fail
+                fig.canvas.draw()
+
             save_path = Path(output) / result_name
             save_path.parent.mkdir(exist_ok=True, parents=True)
-            plt.axis('off')
-            plt.savefig(save_path, bbox_inches='tight', pad_inches=0, transparent=True)
+            image = Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+            image.save(save_path)
             plt.close()
             pbar.set_description(f'Saving {result_name} to {save_path}')
 
@@ -255,8 +263,8 @@ class FastSAMPrompt:
             orig_masks_area = torch.sum(masks, dim=(1, 2))
 
             union = bbox_area + orig_masks_area - masks_area
-            iou = masks_area / union
-            max_iou_index = torch.argmax(iou)
+            IoUs = masks_area / union
+            max_iou_index = torch.argmax(IoUs)
 
             self.results[0].masks.data = torch.tensor(np.array([masks[max_iou_index].cpu().numpy()]))
         return self.results

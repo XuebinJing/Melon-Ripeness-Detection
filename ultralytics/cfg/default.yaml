@@ -2,7 +2,7 @@
 # Default training settings and hyperparameters for medium-augmentation COCO training
 
 task: detect  # (str) YOLO task, i.e. detect, segment, classify, pose
-mode: train # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
+mode: train  # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 
 # Train settings -------------------------------------------------------------------------------------------------------
 model:  # (str, optional) path to model file, i.e. yolov8n.pt, yolov8n.yaml
@@ -29,7 +29,7 @@ rect: False  # (bool) rectangular training if mode='train' or rectangular valida
 cos_lr: False  # (bool) use cosine learning rate scheduler
 close_mosaic: 10  # (int) disable mosaic augmentation for final epochs (0 to disable)
 resume: False  # (bool) resume training from last checkpoint
-amp: True  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
+amp: False  # (bool) Automatic Mixed Precision (AMP) training, choices=[True, False], True runs AMP check
 fraction: 1.0  # (float) dataset fraction to train on (default is 1.0, all images in train set)
 profile: False  # (bool) profile ONNX and TensorRT speeds during training for loggers
 freeze: None  # (int | list, optional) freeze first n layers, or freeze list of layer indices during training

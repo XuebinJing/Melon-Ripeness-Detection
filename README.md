@@ -1,16 +1,25 @@
-# <div align="center">LRD-YOLO</div>
-
-LRD-YOLO is a high-throughput YOLOv8-based method designed for leaf rolling detection in maize. It incorporates two significant enhancements: the Convolutional Block Attention Module (CBAM) and Deformable ConvNets v2 (DCNv2). This method demonstrates exceptional performance in occluded scenes and complex environments, facilitating the effective recognition of leaf rolling as a plant phenotype.
+# <div align="center">Melon Ripeness Detection</div>
 
 
 
-For full documentation on installation, training, validation, prediction, and deployment, please refer to the [YOLOv8 GitHub repository](https://github.com/ultralytics/ultralytics).
+The weight of the MRD-YOLO model is submitted to `weights/MRD.pt`.  You can follow the steps in **Evaluation** to validate the model's parameters as well as the floating-point operations, and to test the MRD-YOLO model on a dataset containing 300 images.
+
+
+
+Please make sure you have the ultralytics package installed.
+
+```py
+# Install the ultralytics package from PyPI
+pip install ultralytics
+```
+
+For full documentation on installation, training, validation, prediction, and deployment, please refer to the [YOLOv8 GitHub repository](https://github.com/ultralytics/ultralytics) and [Ultralytics YOLOv8 Docs](https://docs.ultralytics.com/).
 
 
 
 ### Dataset
 
-The partially annotated data used as examples are stored in the  `dataset/` directory, the complete original dataset is available on request.
+The partially data used as examples are stored in  `dataset/images/test` directory,  and the corresponding annotations are stored in `dataset/labels/test`.  The complete original dataset is available on request.
 
 **Dataset Structure:**
 
@@ -18,45 +27,32 @@ The partially annotated data used as examples are stored in the  `dataset/` dire
 dataset
 |-- images: Stores images used for training and testing.
 |-- labels: Stores the annotations of the dataset in the YOLO format.
-|-- leaf.yaml: YAML files required for LRD-YOLO training.
+|-- melon.yaml: YAML files required for MRD-YOLO training.
 
 ```
-
- 
-
-### Training
-
-👉  **Models Directory (`ultralytics/cfg/models/v8/`):** Here you will find a variety of pre-configured model profiles (.ymls) for creating LRD-YOLO models. These include the baseline YOLOv8 model, LRD-YOLO, and various models used in the ablation experiments of the paper. Change the `.yml` file in the command `model = YOLO("ultralytics/cfg/models/v8/yolov8.yaml")` to switch between different models for training.
-
-```python
-from ultralytics import YOLO
-# Load a model
-model = YOLO("ultralytics/cfg/models/v8/yolov8.yaml")
-
-# Use the model
-results = model.train(data="dataset/leaf.yaml", epochs=100, batch=16)  # train the model
-```
-
-Refer to the YOLOv8 GitHub repository for more details about epochs, batch size, and other arguments used during the training process. Check the `runs/detect/` directory for the training results.
-
-
 
 ### Evaluation
 
-👉 LRD-YOLO models automatically remember their training settings, allowing you to validate a model at the same image size and on the original dataset by simply using the following commands. The `best.pt` produced by the model training is stored in the corresponding folder in the directory `runs/detect/`.
+👉 Refer to the following code (Test.py) to test the MRD-YOLO model.
 
 ```python
 from ultralytics import YOLO
 # Load a model
-model = YOLO('weights/best.pt')  # load a custom model
+model = YOLO('weights/MRD.pt')  # load a custom model
  
 # Validate the model
-metrics = model.val(split='test',batch=1)  # no arguments needed, dataset and settings remembered
+metrics = model.val(data='dataset/melon.yaml',split='test',batch=1)  
 metrics.box.map    # map50-95
 metrics.box.map50  # map50
 metrics.box.map75  # map75
 metrics.box.maps   # a list contains map50-95 of each category
 
+```
+
+Or you can just run the command:
+
+```python
+python Test.py
 ```
 
 

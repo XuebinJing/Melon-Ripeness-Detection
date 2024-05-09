@@ -4,15 +4,160 @@ Block modules
 """
 
 import torch
+
+
+ 
 import torch.nn as nn
 import torch.nn.functional as F
 import math
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv
 from .transformer import TransformerBlock
 from .dysnakeconv import DySnakeConv
+from torch import Tensor, LongTensor
+from timm.layers import weight_init
+
+class activation(nn.ReLU):
+    def __init__(self, dim, act_num=3, deploy=False):
+        super(activation, self).__init__()
+        self.deploy = deploy
+        self.weight = torch.nn.Parameter(torch.randn(dim, 1, act_num*2 + 1, act_num*2 + 1))
+        self.bias = None
+        self.bn = nn.BatchNorm2d(dim, eps=1e-6)
+        self.dim = dim
+        self.act_num = act_num
+        weight_init.trunc_normal_(self.weight, std=.02)
+
+    def forward(self, x):
+        if self.deploy:
+            return torch.nn.functional.conv2d(
+                super(activation, self).forward(x),
+                self.weight, self.bias, padding=(self.act_num*2 + 1)//2, groups=self.dim)
+        else:
+            return self.bn(torch.nn.functional.conv2d(
+                super(activation, self).forward(x),
+                self.weight, padding=self.act_num, groups=self.dim))
+
+    def _fuse_bn_tensor(self, weight, bn):
+        kernel = weight
+        running_mean = bn.running_mean
+        running_var = bn.running_var
+        gamma = bn.weight
+        beta = bn.bias
+        eps = bn.eps
+        std = (running_var + eps).sqrt()
+        t = (gamma / std).reshape(-1, 1, 1, 1)
+        return kernel * t, beta + (0 - running_mean) * gamma / std
+
+    def switch_to_deploy(self):
+        if not self.deploy:
+            kernel, bias = self._fuse_bn_tensor(self.weight, self.bn)
+            self.weight.data = kernel
+            self.bias = torch.nn.Parameter(torch.zeros(self.dim))
+            self.bias.data = bias
+            self.__delattr__('bn')
+            self.deploy = True
+
+
+class vanillanetBlock(nn.Module):
+    def __init__(self, dim, dim_out, act_num=3, stride=2, deploy=False, ada_pool=None):
+        super().__init__()
+        self.act_learn = 1
+        self.deploy = deploy
+        if self.deploy:
+            self.conv = nn.Conv2d(dim, dim_out, kernel_size=1)
+        else:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(dim, dim, kernel_size=1),
+                nn.BatchNorm2d(dim, eps=1e-6),
+            )
+            self.conv2 = nn.Sequential(
+                nn.Conv2d(dim, dim_out, kernel_size=1),
+                nn.BatchNorm2d(dim_out, eps=1e-6)
+            )
+
+        if not ada_pool:
+            self.pool = nn.Identity() if stride == 1 else nn.MaxPool2d(stride)
+        else:
+            self.pool = nn.Identity() if stride == 1 else nn.AdaptiveMaxPool2d((ada_pool, ada_pool))
+
+        self.act = activation(dim_out, act_num)
+
+    def forward(self, x):
+        if self.deploy:
+            x = self.conv(x)
+        else:
+            x = self.conv1(x)
+            x = torch.nn.functional.leaky_relu(x,self.act_learn)
+            x = self.conv2(x)
+
+        x = self.pool(x)
+        x = self.act(x)
+        return x
+
+    def _fuse_bn_tensor(self, conv, bn):
+        kernel = conv.weight
+        bias = conv.bias
+        running_mean = bn.running_mean
+        running_var = bn.running_var
+        gamma = bn.weight
+        beta = bn.bias
+        eps = bn.eps
+        std = (running_var + eps).sqrt()
+        t = (gamma / std).reshape(-1, 1, 1, 1)
+        return kernel * t, beta + (bias - running_mean) * gamma / std
+
+    def switch_to_deploy(self):
+        if not self.deploy:
+            kernel, bias = self._fuse_bn_tensor(self.conv1[0], self.conv1[1])
+            self.conv1[0].weight.data = kernel
+            self.conv1[0].bias.data = bias
+            # kernel, bias = self.conv2[0].weight.data, self.conv2[0].bias.data
+            kernel, bias = self._fuse_bn_tensor(self.conv2[0], self.conv2[1])
+            self.conv = self.conv2[0]
+            self.conv.weight.data = torch.matmul(kernel.transpose(1,3), self.conv1[0].weight.data.squeeze(3).squeeze(2)).transpose(1,3)
+            self.conv.bias.data = bias + (self.conv1[0].bias.data.view(1,-1,1,1)*kernel).sum(3).sum(2).sum(1)
+            self.__delattr__('conv1')
+            self.__delattr__('conv2')
+            self.act.switch_to_deploy()
+            self.deploy = True
 
 __all__ = ('DFL', 'HGBlock', 'HGStem', 'SPP', 'SPPF', 'C1', 'C2', 'C3', 'C2f', 'C3x', 'C3TR', 'C3Ghost',
            'GhostBottleneck', 'Bottleneck', 'BottleneckCSP', 'Proto', 'RepC3','C2f_DCN','C2f_dysnakeconv')
+
+
+class C2fattention1(nn.Module):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+        super().__init__()
+        self.c = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.m1 = nn.ModuleList([TripletAttention(self.c)]) #添加在Bottleneck之前
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
+        self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+ 
+    def forward(self, x):
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y1=self.m1[0](y[-1])
+        y.extend(m(y1) for m in self.m)
+        return self.cv2(torch.cat(y, 1))
+
+
+class C2fattention2(nn.Module):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):  # ch_in, ch_out, number, shortcut, groups, expansion
+        super().__init__()
+        self.c = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, 2 * self.c, 1, 1)
+        self.m1 = nn.ModuleList([TripletAttention((2 + n) * self.c)]) #添加在最后一个卷积之前
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
+        self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+ 
+    def forward(self, x):
+        y = list(self.cv1(x).split((self.c, self.c), 1))
+        y.extend(m(y[-1]) for m in self.m)
+        y1=self.m1[0](torch.cat(y, 1))
+        return self.cv2(y1)
+
+
+
 
 class Bottleneck(nn.Module):
     """Standard bottleneck."""
@@ -429,3 +574,64 @@ class C2f_dysnakeconv(C2f):
         super().__init__(c1, c2, n, shortcut, g, e)
         self.m = nn.ModuleList(Bottleneck_dysnakeconv(self.c, self.c, shortcut, g, k=(3, 3), e=1.0) for _ in range(n))
 
+
+
+class BasicConv(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, relu=True,
+                 bn=True, bias=False):
+        super(BasicConv, self).__init__()
+        self.out_channels = out_planes
+        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride, padding=padding,
+                              dilation=dilation, groups=groups, bias=bias)
+        self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True) if bn else None
+        self.relu = nn.ReLU() if relu else None
+ 
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.relu is not None:
+            x = self.relu(x)
+        return x
+ 
+ 
+class ZPool(nn.Module):
+    def forward(self, x):
+        return torch.cat((torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)), dim=1)
+ 
+ 
+class AttentionGate(nn.Module):
+    def __init__(self):
+        super(AttentionGate, self).__init__()
+        kernel_size = 7
+        self.compress = ZPool()
+        self.conv = BasicConv(2, 1, kernel_size, stride=1, padding=(kernel_size - 1) // 2, relu=False)
+ 
+    def forward(self, x):
+        x_compress = self.compress(x)
+        x_out = self.conv(x_compress)
+        scale = torch.sigmoid_(x_out)
+        return x * scale
+ 
+class TripletAttention(nn.Module):
+    def __init__(self, no_spatial=False):
+        super(TripletAttention, self).__init__()
+        self.cw = AttentionGate()
+        self.hc = AttentionGate()
+        self.no_spatial = no_spatial
+        if not no_spatial:
+            self.hw = AttentionGate()
+ 
+    def forward(self, x):
+        x_perm1 = x.permute(0, 2, 1, 3).contiguous()
+        x_out1 = self.cw(x_perm1)
+        x_out11 = x_out1.permute(0, 2, 1, 3).contiguous()
+        x_perm2 = x.permute(0, 3, 2, 1).contiguous()
+        x_out2 = self.hc(x_perm2)
+        x_out21 = x_out2.permute(0, 3, 2, 1).contiguous()
+        if not self.no_spatial:
+            x_out = self.hw(x)
+            x_out = 1 / 3 * (x_out + x_out11 + x_out21)
+        else:
+            x_out = 1 / 2 * (x_out11 + x_out21)
+        return x_out
