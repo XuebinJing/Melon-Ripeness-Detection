@@ -27,7 +27,7 @@ The partially data used as examples are stored in  `dataset/images/test` directo
 dataset
 |-- images: Stores images used for training and testing.
 |-- labels: Stores the annotations of the dataset in the YOLO format.
-|-- melon.yaml: YAML files required for MRD-YOLO training.
+|-- melon.yaml: YAML files required for MRD-YOLO training. Please remember to replace the path with your own and note the space between the colon and the path.
 
 ```
 
