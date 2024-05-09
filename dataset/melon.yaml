@@ -1,7 +1,7 @@
 #Replace the path with your own and note the space between the colon and the path
-train: I:/desk/rolled/data3/melon/code/dataset/images/train 
-val: I:/desk/rolled/data3/melon/code/dataset/images/val
-test: I:/desk/rolled/data3/melon/code/dataset/images/test
+train: I:/desk/data3/melon/code/dataset/images/train 
+val: I:/desk/data3/melon/code/dataset/images/val
+test: I:/desk/data3/melon/code/dataset/images/test
 # number of classes
 nc: 2
 # class names
