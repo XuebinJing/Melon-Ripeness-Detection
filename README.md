@@ -20,6 +20,9 @@ For full documentation on installation, training, validation, prediction, and de
 ### Dataset
 
 The partially data used as examples are stored in  `dataset/images/test` directory,  and the corresponding annotations are stored in `dataset/labels/test`.  Due to the large size of the dataset, it is stored on Baidu at the following address: https://pan.baidu.com/s/1aPsIfyJ1V2Ym23uhd4L-Eg. This extraction code will be made available on the GitHub repository as soon as the article is published.
+![image](https://github.com/user-attachments/assets/80179191-1d98-4020-9f07-1f9e7426dae3)
+
+
 **Dataset Structure:**
 
 ```lua
